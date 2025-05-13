@@ -19,6 +19,7 @@
 ### 사전 요구사항
 
 - Node.js 14.0 이상
+- Python
 - 현대적인 웹 브라우저 (Chrome, Firefox, Safari 최신 버전 권장)
 
 ### 설치
@@ -28,6 +29,12 @@
 git clone https://github.com/sdf5771/yolo11-run-web-onnx.git
 cd yolo11-run-web-onnx
 
+# Install YOLO11
+pip install ultralytics
+
+# "yolo11n" 모델 다운로드 후 ONNX 모델로 변환 + example image 다운로드
+python main.py
+
 # 의존성 설치
 npm install -g http-server
 
@@ -36,10 +43,10 @@ http-server -c-1
 ```
 
 ## 사용 방법
-
-1. 개발 서버를 실행한 후 브라우저에서 로컬 서버에 접속합니다.
-2. 이미지 업로드, 카메라 사용, 또는 비디오 파일을 통해 객체 감지를 시작할 수 있습니다.
-3. 감지된 객체는 경계 상자와 클래스 레이블로 표시됩니다.
+1. main.py 파일을 실행해서 "yolo11n" 모델을 다운로드 후 ONNXX 모델로 변환합니다.
+2. 개발 서버를 실행한 후 브라우저에서 로컬 서버에 접속합니다. (http-server 사용 권장)
+3. 이미지 업로드, 카메라 사용, 또는 비디오 파일을 통해 객체 감지를 시작할 수 있습니다.
+4. 감지된 객체는 경계 상자와 클래스 레이블로 표시됩니다.
 
 ## 기술 스택
 
