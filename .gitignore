@@ -1,0 +1,9 @@
+# model file
+yolo11n.pt
+yolo11n.onnx
+
+# example image
+bus.jpg
+
+# python
+__pycache__
