@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO11 Run Web ONNX</title>
+</head>
+<body>
+    <main>
+        <input type="file" id="fileInput" accept="image/*">
+        <canvas id="canvas">
+
+        </canvas>
+    </main>  
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const canvas = document.getElementById('canvas');
+
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+        });
+    </script>
+</body>
+</html>
