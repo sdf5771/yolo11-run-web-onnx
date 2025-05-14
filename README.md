@@ -2,11 +2,16 @@
 
 ## 소개
 
-이 프로젝트는 객체 감지 모델인 'YOLO11'을 웹 환경에서 실행할 수 있도록 구현한 애플리케이션입니다. ONNX 런타임을 활용하여 브라우저에서 직접 객체 감지가 가능합니다.
+이 프로젝트는 객체 감지 모델인 'YOLO11'을 웹 환경에서 실행할 수 있도록 구현한 애플리케이션입니다. 
+
+ONNX 런타임을 활용하여 브라우저에서 직접 객체 감지가 가능합니다.
+
+사용하는 브라우저의 WebGPU 지원 여부에 따라 WebGPU혹은 WASM을 사용하는 모델을 로드합니다.
 
 - ONNX Runtime - https://onnxruntime.ai/docs/tutorials/web/
 - YOLO11 Docs - https://docs.ultralytics.com/ko/models/#what-types-of-tasks-can-yolo11-perform-and-how-does-it-compare-to-other-yolo-versions
 - YOLO11n DataSet (COCO Classes) - https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml
+- MDN - navigator.gpu - https://developer.mozilla.org/en-US/docs/Web/API/Navigator/gpu
 
 ## 주요 기능
 
