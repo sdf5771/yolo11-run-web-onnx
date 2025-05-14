@@ -30,6 +30,7 @@
         const canvas = document.querySelector('#canvas');
         const detectResult = document.querySelector('#detectResult');
         const detectResultBox = document.querySelector('#detectResultBox');
+        let modelSession = null;
 
         // YOLO11n 모델이 지원하는 COCO 클래스 데이터셋
         const cocoClassesDataSet = [
@@ -115,6 +116,10 @@
         */
         const loadOptimizedModel = async () => {
             try {
+                // 이미 모델이 로드되어 있으면 재사용
+                if (modelSession) {
+                    return modelSession;
+                }
                 // 더 자세한 디버깅 정보
                 ort.env.debug = true;
                 ort.env.logLevel = 'verbose';
@@ -145,7 +150,8 @@
                         // WebGPU 모델 로드
                         options.executionProviders = ['webgpu'];
                         console.log('WebGPU 모델 로드 시작');
-                        return await ort.InferenceSession.create(modelPath, options);
+                        modelSession = await ort.InferenceSession.create(modelPath, options);
+                        return modelSession;
                     } catch (error) {
                         console.error('WebGPU 지원 없음:', error);
                     }   
@@ -154,7 +160,8 @@
                 // WASM 모델 로드
                 options.executionProviders = ['wasm'];
                 console.log('WASM 모델 로드 시작');
-                return await ort.InferenceSession.create(modelPath, options);
+                modelSession = await ort.InferenceSession.create(modelPath, options);
+                return modelSession;
             } catch (error) {
                 console.error('모델 로드 오류:', error);
                 throw error;
