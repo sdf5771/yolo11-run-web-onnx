@@ -58,7 +58,11 @@ http-server -c-1
 ## 기술 스택
 
 - ONNX 런타임 웹
-- WebGL 가속
+- WebGPU
+- YOLO11n
+- Vanila Javascript
+- HTML
+- Canvas
 
 ## 라이센스
 
