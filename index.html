@@ -101,23 +101,16 @@
             });
         }
 
-        const runModel = async (imageInput, width, height) => {
+        /**
+         * 사용 중인 브라우저의 WebGPU 지원 여부에 따라 WebGPU 또는 WASM 모델을 로드
+         * @returns {Promise<ort.InferenceSession>}
+        */
+        const loadOptimizedModel = async () => {
             try {
                 // 더 자세한 디버깅 정보
                 ort.env.debug = true;
                 ort.env.logLevel = 'verbose';
-                
-                const options = {
-                    executionProviders: ['wasm'],
-                    graphOptimizationLevel: 'all',
-                    enableCpuMemArena: true,
-                    executionMode: 'sequential',
-                    enableOrtCustomOps: true
-                };
-                
-                const modelPath = "./yolo11n.onnx";
-                console.log('모델 로딩 시작:', modelPath);
-                
+
                 // fetch를 사용한 모델 로드 방식
                 const response = await fetch(modelPath);
                 if (!response.ok) {
@@ -126,8 +119,41 @@
                 
                 const modelBuffer = await response.arrayBuffer();
                 console.log('모델 파일 로드 완료, 크기:', modelBuffer.byteLength);
+
+                // 모델 경로
+                const modelPath = "./yolo11n.onnx";
+
+                // 모델 옵션
+                const options = {
+                    graphOptimizationLevel: 'all',
+                    enableCpuMemArena: true,
+                    executionMode: 'sequential',
+                    enableOrtCustomOps: true
+                };
+
+                // WebGPU 지원 여부 확인
+                if(navigator.gpu) {
+                    try {
+                        // WebGPU 모델 로드
+                        options.executionProviders = ['webgpu'];
+                        return await ort.InferenceSession.create(modelPath, options);
+                    } catch (error) {
+                        console.error('WebGPU 지원 없음:', error);
+                    }   
+                }
                 
-                const model = await ort.InferenceSession.create(modelBuffer, options);
+                // WASM 모델 로드
+                options.executionProviders = ['wasm'];
+                return await ort.InferenceSession.create(modelPath, options);
+            } catch (error) {
+                console.error('모델 로드 오류:', error);
+                throw error;
+            }
+        }
+
+        const runModel = async (imageInput, width, height) => {
+            try {
+                const model = await loadOptimizedModel();
                 console.log('모델 세션 생성 완료');
                 
                 // 모델의 입력 및 출력 이름 확인
