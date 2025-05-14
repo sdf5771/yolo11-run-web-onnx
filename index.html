@@ -18,12 +18,20 @@
 <body>
     <main style="display: flex; flex-direction: column; align-items: center;">
         <input type="file" id="fileInput" accept="image/*">
+        <h3 id="detectResult">Detect Result: </h3>
+        <div id="detectResultBox" style="display: flex; flex-direction: column; margin-top: 10px; border: 1px solid #000;">
+
+        </div>
         <canvas id="canvas" style="margin-top: 10px; border: 1px solid #000;"></canvas>
     </main>  
     
     <script type="text/javascript">
         const fileInput = document.querySelector('#fileInput');
         const canvas = document.querySelector('#canvas');
+        const detectResult = document.querySelector('#detectResult');
+        const detectResultBox = document.querySelector('#detectResultBox');
+
+        // YOLO11n 모델이 지원하는 COCO 클래스 데이터셋
         const cocoClassesDataSet = [
             'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',
             'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat',
@@ -111,17 +119,8 @@
                 ort.env.debug = true;
                 ort.env.logLevel = 'verbose';
 
-                // fetch를 사용한 모델 로드 방식
-                const response = await fetch(modelPath);
-                if (!response.ok) {
-                    throw new Error(`모델 로드 실패: ${response.status} ${response.statusText}`);
-                }
-                
-                const modelBuffer = await response.arrayBuffer();
-                console.log('모델 파일 로드 완료, 크기:', modelBuffer.byteLength);
-
                 // 모델 경로
-                const modelPath = "./yolo11n.onnx";
+                const modelPath = "yolo11n.onnx";
 
                 // 모델 옵션
                 const options = {
@@ -131,11 +130,21 @@
                     enableOrtCustomOps: true
                 };
 
+                // fetch를 사용한 모델 로드 방식
+                const response = await fetch(modelPath);
+                if (!response.ok) {
+                    throw new Error(`모델 로드 실패: ${response.status} ${response.statusText}`);
+                }
+                
+                const modelBuffer = await response.arrayBuffer();
+                console.log('모델 파일 로드 완료, 크기:', modelBuffer.byteLength);
+
                 // WebGPU 지원 여부 확인
                 if(navigator.gpu) {
                     try {
                         // WebGPU 모델 로드
                         options.executionProviders = ['webgpu'];
+                        console.log('WebGPU 모델 로드 시작');
                         return await ort.InferenceSession.create(modelPath, options);
                     } catch (error) {
                         console.error('WebGPU 지원 없음:', error);
@@ -144,6 +153,7 @@
                 
                 // WASM 모델 로드
                 options.executionProviders = ['wasm'];
+                console.log('WASM 모델 로드 시작');
                 return await ort.InferenceSession.create(modelPath, options);
             } catch (error) {
                 console.error('모델 로드 오류:', error);
@@ -199,23 +209,86 @@
             console.log('출력 데이터 형태:', output.dims);
             console.log('출력 데이터 크기:', output.size);
             
-            // YOLO11의 출력 포맷에 맞게 처리
-            // 출력 형태는 일반적으로 [batch, num_boxes, box_data]
+            // YOLO11의 출력 형식은 일반적으로 [1, num_detections, 85] 
+            // 85 = [x, y, width, height, confidence, class_scores...]
             const data = output.data;
+            const numDetections = output.dims[1];
+            const detPerClass = output.dims[2]; // 85 (4 좌표 + 1 신뢰도 + 80 클래스)
             
-            // 간단한 예시: 첫 번째 감지된 객체만 사용
-            // 실제로는 여러 객체를 감지하고 신뢰도 점수에 따라 필터링해야 함
-            // 여기서는 임의로 첫 번째 결과만 사용
-            if (output.dims[1] > 0) {
-                // 첫 번째 박스의 좌표 가져오기 (형식: [x, y, width, height, ...])
-                const stride = output.dims[2]; // 박스당 데이터 개수
-                return [data[0], data[1], data[2], data[3]]; // x, y, width, height
+            // 감지 정보를 담을 배열
+            const detections = [];
+            
+            // 최소 신뢰도 임계값 설정
+            const confidenceThreshold = 0.25;
+            
+            // 모든 감지 결과 처리
+            for (let i = 0; i < numDetections; i++) {
+                const startIdx = i * detPerClass;
+                
+                // 신뢰도 점수는 일반적으로 5번째 값
+                const confidence = data[startIdx + 4];
+                
+                // 임계값보다 낮은 신뢰도는 무시
+                if (confidence < confidenceThreshold) continue;
+                
+                // 좌표 정보 추출
+                const x = data[startIdx + 0];
+                const y = data[startIdx + 1];
+                const width = data[startIdx + 2];
+                const height = data[startIdx + 3];
+                
+                // 클래스 점수
+                let maxClassScore = 0;
+                let maxClassIndex = -1;
+                
+                // 클래스 점수 중 가장 높은 값 찾기
+                for (let j = 0; j < 80; j++) {
+                    const classScore = data[startIdx + 5 + j];
+                    if (classScore > maxClassScore) {
+                        maxClassScore = classScore;
+                        maxClassIndex = j;
+                    }
+                }
+                
+                // 결과 추가
+                detections.push({
+                    box: { x, y, width, height },
+                    confidence,
+                    classIndex: maxClassIndex,
+                    className: cocoClassesDataSet[maxClassIndex]
+                });
+                
+                console.log(`Detect ${i+1}: ${cocoClassesDataSet[maxClassIndex]}, Confidence: ${confidence.toFixed(2)}`);
+                const resultElement = document.createElement('span');
+                resultElement.textContent = `Detect ${i+1}: ${cocoClassesDataSet[maxClassIndex]}, Confidence: ${confidence.toFixed(2)}`;
+                detectResultBox.appendChild(resultElement);
+            }
+            
+            // 가장 높은 신뢰도를 가진 객체 하나만 반환 (테스트용)
+            if (detections.length > 0) {
+                // 신뢰도 기준 내림차순 정렬
+                detections.sort((a, b) => b.confidence - a.confidence);
+                const bestDetection = detections[0];
+                
+                // [x, y, width, height, classIndex] 형식으로 반환
+                return [
+                    bestDetection.box.x, 
+                    bestDetection.box.y, 
+                    bestDetection.box.width, 
+                    bestDetection.box.height,
+                    bestDetection.classIndex
+                ];
             }
             
             return null; // 감지된 객체가 없음
         }
 
+        const initializeDetectResultBox = () => {
+            detectResultBox.innerHTML = '';
+        }
+
         fileInput.addEventListener('change', async (event) => {
+            initializeDetectResultBox();
             const file = event.target.files[0];
             const reader = new FileReader();
             reader.onload = async (event) => {
@@ -233,8 +306,8 @@
                 const ctx = canvas.getContext('2d');
                 
                 // 원본 이미지의 크기
-                const canvasWidth = canvas.width;
-                const canvasHeight = canvas.height;
+                const canvasWidth = canvas.style.width;
+                const canvasHeight = canvas.style.height;
                 
                 // 640x640에서 원본 이미지 크기로 좌표 변환
                 const scale = Math.min(640 / canvasWidth, 640 / canvasHeight);
@@ -253,8 +326,11 @@
                 ctx.lineWidth = 2;
                 ctx.clearRect(0, 0, canvasWidth, canvasHeight);
                 ctx.beginPath();
+                console.log(x, y, w, h);
                 ctx.rect(x, y, w, h);
                 ctx.stroke();
+
+                detectResult.textContent = `Detect Result: ${cocoClassesDataSet[boxes[4]]}`;
             }
             reader.readAsDataURL(file);
         });
