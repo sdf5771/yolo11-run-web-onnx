@@ -6,6 +6,7 @@
 
 - ONNX Runtime - https://onnxruntime.ai/docs/tutorials/web/
 - YOLO11 Docs - https://docs.ultralytics.com/ko/models/#what-types-of-tasks-can-yolo11-perform-and-how-does-it-compare-to-other-yolo-versions
+- YOLO11n DataSet (COCO Classes) - https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco.yaml
 
 ## 주요 기능
 
@@ -43,6 +44,7 @@ http-server -c-1
 ```
 
 ## 사용 방법
+
 1. main.py 파일을 실행해서 "yolo11n" 모델을 다운로드 후 ONNXX 모델로 변환합니다.
 2. 개발 서버를 실행한 후 브라우저에서 로컬 서버에 접속합니다. (http-server 사용 권장)
 3. 이미지 업로드, 카메라 사용, 또는 비디오 파일을 통해 객체 감지를 시작할 수 있습니다.
