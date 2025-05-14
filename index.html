@@ -20,9 +20,7 @@
         <h1>YOLO11 Run Web ONNX</h1>
         <input type="file" id="fileInput" accept="image/*">
         <h3 id="detectResult">Detect Result: </h3>
-        <div id="detectResultBox" style="display: flex; flex-direction: column; margin-top: 10px; border: 1px solid #000;">
-
-        </div>
+        <div id="detectResultBox" style="display: flex; flex-direction: column; margin-top: 10px; border: 1px solid #000;"></div>
         <canvas id="canvas" style="margin-top: 10px; border: 1px solid #000;"></canvas>
     </main>  
     
@@ -98,10 +96,12 @@
                     const ctxImageData = inputCtx.getImageData(0, 0, 640, 640);
                     const red = [], green = [], blue = [];
                     for (let i = 0; i < ctxImageData.data.length; i += 4) {
-                        red.push(ctxImageData.data[i]);
-                        green.push(ctxImageData.data[i + 1]);
-                        blue.push(ctxImageData.data[i + 2]);
+                        red.push(ctxImageData.data[i] / 255.0);
+                        green.push(ctxImageData.data[i + 1] / 255.0);
+                        blue.push(ctxImageData.data[i + 2] / 255.0);
                     }
+
+                    // RGB 채널 순서로 변환
                     const imageInput = [...red, ...green, ...blue];
                     resolve([imageInput, 640, 640]); // 고정된 크기 반환
                 };
@@ -187,7 +187,7 @@
                 // 입력 이름이 배열에서 첫 번째 항목을 사용
                 const inputName = inputNames[0];
                 console.log('사용할 입력 이름:', inputName);
-                
+
                 const inputTensor = new ort.Tensor('float32', Float32Array.from(imageInput), [1, 3, width, height]);
                 console.log('모델 입력 텐서 생성 완료, 형태:', [1, 3, width, height]);
                 
@@ -202,6 +202,51 @@
                 console.error('모델 실행 오류:', error);
                 throw error;
             }
+        }
+
+        // IOU 계산 함수
+        function calculateIOU(box1, box2) {
+            const x1 = Math.max(box1.x, box2.x);
+            const y1 = Math.max(box1.y, box2.y);
+            const x2 = Math.min(box1.x + box1.width, box2.x + box2.width);
+            const y2 = Math.min(box1.y + box1.height, box2.y + box2.height);
+            
+            if (x2 < x1 || y2 < y1) return 0;
+            
+            const intersection = (x2 - x1) * (y2 - y1);
+            const area1 = box1.width * box1.height;
+            const area2 = box2.width * box2.height;
+            
+            return intersection / (area1 + area2 - intersection);
+        }
+        
+        // NMS 함수
+        function applyNMS(detections, iouThreshold = 0.45) {
+            // 신뢰도 기준 내림차순 정렬
+            detections.sort((a, b) => b.confidence - a.confidence);
+            
+            const selectedDetections = [];
+            const rejected = new Set();
+            
+            for (let i = 0; i < detections.length; i++) {
+                if (rejected.has(i)) continue;
+                
+                selectedDetections.push(detections[i]);
+                
+                for (let j = i + 1; j < detections.length; j++) {
+                    if (rejected.has(j)) continue;
+                    
+                    // 같은 클래스의 객체에 대해서만 NMS 적용
+                    if (detections[i].classIndex === detections[j].classIndex) {
+                        const iou = calculateIOU(detections[i].box, detections[j].box);
+                        if (iou > iouThreshold) {
+                            rejected.add(j);
+                        }
+                    }
+                }
+            }
+            
+            return selectedDetections;
         }
 
         const postProcessImage = async (outputTensor) => {
@@ -221,11 +266,12 @@
             console.log('출력 데이터 형태:', output.dims);
             console.log('출력 데이터 크기:', output.size);
             
-            // YOLO11의 출력 형식은 일반적으로 [1, num_detections, 85] 
-            // 85 = [x, y, width, height, confidence, class_scores...]
+            // YOLO11n의 출력 형식은 [1, 84, 8400]
+            // 84 = 4개 좌표 + 80개 클래스 확률
             const data = output.data;
-            const numDetections = output.dims[1];
-            const detPerClass = output.dims[2]; // 85 (4 좌표 + 1 신뢰도 + 80 클래스)
+            const numClasses = cocoClassesDataSet.length; // COCO 데이터셋의 클래스 수
+            const numCoords = 4;  // x, y, width, height
+            const numDetections = output.dims[2]; // 8400
             
             // 감지 정보를 담을 배열
             const detections = [];
@@ -233,67 +279,59 @@
             // 최소 신뢰도 임계값 설정
             const confidenceThreshold = 0.25;
             
-            // 모든 감지 결과 처리
+            // 모든 감지 후보 처리
             for (let i = 0; i < numDetections; i++) {
-                const startIdx = i * detPerClass;
-                
-                // 신뢰도 점수는 일반적으로 5번째 값
-                const confidence = data[startIdx + 4];
-                
-                // 임계값보다 낮은 신뢰도는 무시
-                if (confidence < confidenceThreshold) continue;
-                
-                // 좌표 정보 추출
-                const x = data[startIdx + 0];
-                const y = data[startIdx + 1];
-                const width = data[startIdx + 2];
-                const height = data[startIdx + 3];
-                
-                // 클래스 점수
+                // 모든 클래스에 대한 최대 신뢰도 찾기
                 let maxClassScore = 0;
                 let maxClassIndex = -1;
                 
-                // 클래스 점수 중 가장 높은 값 찾기
-                for (let j = 0; j < cocoClassesDataSet.length; j++) {
-                    const classScore = data[startIdx + 5 + j];
+                for (let c = 0; c < numClasses; c++) {
+                    // 클래스 점수는 4번째 위치부터 시작
+                    const classIdx = numCoords + c;
+                    const classScore = data[classIdx * numDetections + i];
                     if (classScore > maxClassScore) {
                         maxClassScore = classScore;
-                        maxClassIndex = j;
+                        maxClassIndex = c;
                     }
                 }
+                
+                // 임계값보다 낮은 신뢰도는 무시
+                if (maxClassScore < confidenceThreshold) continue;
+                
+                // 좌표 정보 추출 - 전치된 형식에서는 좌표가 다른 위치에 있음
+                const x = data[0 * numDetections + i]; // x 좌표
+                const y = data[1 * numDetections + i]; // y 좌표
+                const width = data[2 * numDetections + i]; // 너비
+                const height = data[3 * numDetections + i]; // 높이
                 
                 // 결과 추가
                 detections.push({
                     box: { x, y, width, height },
-                    confidence,
+                    confidence: maxClassScore,
                     classIndex: maxClassIndex,
                     className: cocoClassesDataSet[maxClassIndex]
                 });
-                
-                console.log(`Detect ${i+1}: ${cocoClassesDataSet[maxClassIndex]}, Confidence: ${confidence.toFixed(2)}`);
-                const resultElement = document.createElement('span');
-                resultElement.textContent = `Detect ${i+1}: ${cocoClassesDataSet[maxClassIndex]}, Confidence: ${confidence.toFixed(2)}`;
-                detectResultBox.appendChild(resultElement);
             }
             
             // 가장 높은 신뢰도를 가진 객체 하나만 반환 (테스트용)
             if (detections.length > 0) {
                 // 신뢰도 기준 내림차순 정렬
-                detections.sort((a, b) => b.confidence - a.confidence);
-                const bestDetection = detections[0];
+                detections.sort((a, b) => b.confidence - a.confidence)
+                return applyNMS(detections);
+                // const bestDetection = detections[0];
                 
-                // [x, y, width, height, classIndex] 형식으로 반환
-                return [
-                    bestDetection.box.x, 
-                    bestDetection.box.y, 
-                    bestDetection.box.width, 
-                    bestDetection.box.height,
-                    bestDetection.classIndex
-                ];
+                // // [x, y, width, height, classIndex] 형식으로 반환
+                // return [
+                //     bestDetection.box.x, 
+                //     bestDetection.box.y, 
+                //     bestDetection.box.width, 
+                //     bestDetection.box.height,
+                //     bestDetection.classIndex
+                // ];
             }
             
             return null; // 감지된 객체가 없음
-        }
+        };
 
         const initializeDetectResultBox = () => {
             detectResultBox.innerHTML = '';
@@ -306,7 +344,6 @@
             reader.onload = async (event) => {
                 const tensor = await getImageTensorFromPath(event.target.result);
                 const [imageInput, width, height] = await preProcessImage(event.target.result);
-                console.log('imageInput ', imageInput);
                 const outputTensor = await runModel(imageInput, width, height);
                 const boxes = await postProcessImage(outputTensor);
                 
@@ -334,21 +371,54 @@
                 const offsetX = (640 - scaledWidth) / 2;
                 const offsetY = (640 - scaledHeight) / 2;
                 
-                // 바운딩 박스 좌표 변환
-                const x = (boxes[0] - offsetX) / scale;
-                const y = (boxes[1] - offsetY) / scale;
-                const w = boxes[2] / scale;
-                const h = boxes[3] / scale;
+                for (let i = 0; i < boxes.length; i++) {
+                    const box = boxes[i];
+    
+                    // YOLO 출력은 (중심 x, 중심 y, 너비, 높이)이므로 변환 필요
+                    // 모델 출력 좌표는 640x640 스케일 기준
+                    const centerX = box.box.x;
+                    const centerY = box.box.y;
+                    const width = box.box.width;
+                    const height = box.box.height;
+                    
+                    // 원본 이미지 스케일로 변환
+                    // 여기서는 입력 이미지가 패딩되어 640x640에 맞춰졌으므로 패딩 오프셋 고려
+                    const scale = Math.min(640 / canvasWidth, 640 / canvasHeight);
+                    const scaledWidth = canvasWidth * scale;
+                    const scaledHeight = canvasHeight * scale;
+                    const offsetX = (640 - scaledWidth) / 2;
+                    const offsetY = (640 - scaledHeight) / 2;
+                    
+                    // 패딩을 고려한 좌표 계산 및 원본 이미지 스케일로 변환
+                    const imgX = (centerX - offsetX) / scale;
+                    const imgY = (centerY - offsetY) / scale;
+                    const imgWidth = width / scale;
+                    const imgHeight = height / scale;
+                    
+                    // 중심 좌표를 좌상단 좌표로 변환
+                    const x = imgX - imgWidth / 2;
+                    const y = imgY - imgHeight / 2;
+                    
+                    // 바운딩 박스 그리기
+                    ctx.strokeStyle = "red";
+                    ctx.lineWidth = 2;
+                    ctx.font = "16px Arial";
+                    ctx.fillStyle = "red";
+                    ctx.beginPath();
+                    console.log(box.className, x, y, imgWidth, imgHeight);
+                    ctx.rect(x, y, imgWidth, imgHeight);
+                    ctx.stroke();
+                    
+                    // 텍스트 위치 조정 - 바운딩 박스 상단에 표시
+                    ctx.fillText(box.className + ' ' + box.confidence.toFixed(2), x, y - 5);
 
-                ctx.strokeStyle = "red";
-                ctx.lineWidth = 2;
-                
-                ctx.beginPath();
-                console.log(x, y, w, h);
-                ctx.rect(x, y, w, h);
-                ctx.stroke();
+                    console.log(`Detect ${i+1}: ${cocoClassesDataSet[box.classIndex]}, Confidence: ${box.confidence.toFixed(2)}`);
+                    const resultElement = document.createElement('span');
+                    resultElement.textContent = `Detect ${i+1}: ${cocoClassesDataSet[box.classIndex]}, Confidence: ${box.confidence.toFixed(2)}`;
+                    detectResultBox.appendChild(resultElement);
+                }
 
-                detectResult.textContent = `Detect Result: ${cocoClassesDataSet[boxes[4]]}`;
+                detectResult.textContent = `Detect Result: ${cocoClassesDataSet[boxes[0].classIndex]}`;
             }
             reader.readAsDataURL(file);
         });
