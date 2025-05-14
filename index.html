@@ -17,6 +17,7 @@
 </head>
 <body>
     <main style="display: flex; flex-direction: column; align-items: center;">
+        <h1>YOLO11 Run Web ONNX</h1>
         <input type="file" id="fileInput" accept="image/*">
         <h3 id="detectResult">Detect Result: </h3>
         <div id="detectResultBox" style="display: flex; flex-direction: column; margin-top: 10px; border: 1px solid #000;">
@@ -31,6 +32,7 @@
         const detectResult = document.querySelector('#detectResult');
         const detectResultBox = document.querySelector('#detectResultBox');
         let modelSession = null;
+        let ctx = null;
 
         // YOLO11n 모델이 지원하는 COCO 클래스 데이터셋
         const cocoClassesDataSet = [
@@ -64,7 +66,9 @@
 
         const preProcessImage = async (path) => {
             return new Promise((resolve, reject) => {
-                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    ctx = canvas.getContext('2d');
+                }
                 const imageElement = new Image();
                 
                 imageElement.onload = () => {
@@ -250,7 +254,7 @@
                 let maxClassIndex = -1;
                 
                 // 클래스 점수 중 가장 높은 값 찾기
-                for (let j = 0; j < 80; j++) {
+                for (let j = 0; j < cocoClassesDataSet.length; j++) {
                     const classScore = data[startIdx + 5 + j];
                     if (classScore > maxClassScore) {
                         maxClassScore = classScore;
@@ -310,12 +314,18 @@
                     console.log('감지된 객체가 없습니다.');
                     return;
                 }
+                console.log('감지된 객체: ', boxes);
 
-                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    ctx = canvas.getContext('2d');
+                }
                 
                 // 원본 이미지의 크기
-                const canvasWidth = canvas.style.width;
-                const canvasHeight = canvas.style.height;
+                const canvasWidth = canvas.width;
+                const canvasHeight = canvas.height;
+
+                console.log('canvasWidth ', canvasWidth);
+                console.log('canvasHeight ', canvasHeight);
                 
                 // 640x640에서 원본 이미지 크기로 좌표 변환
                 const scale = Math.min(640 / canvasWidth, 640 / canvasHeight);
@@ -329,10 +339,10 @@
                 const y = (boxes[1] - offsetY) / scale;
                 const w = boxes[2] / scale;
                 const h = boxes[3] / scale;
-                
+
                 ctx.strokeStyle = "red";
                 ctx.lineWidth = 2;
-                ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+                
                 ctx.beginPath();
                 console.log(x, y, w, h);
                 ctx.rect(x, y, w, h);
