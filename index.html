@@ -118,6 +118,7 @@
             try {
                 // 이미 모델이 로드되어 있으면 재사용
                 if (modelSession) {
+                    console.log('이미 로드된 모델 세션이 있으므로 기존 모델 세션을 재사용합니다.');
                     return modelSession;
                 }
                 // 더 자세한 디버깅 정보
