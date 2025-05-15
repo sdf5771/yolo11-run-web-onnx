@@ -1,6 +1,10 @@
 # model file
 yolo11n.pt
 yolo11n.onnx
+yolo11m.pt
+yolo11m.onnx
+yolo11s.pt
+yolo11s.onnx
 
 # example image
 bus.jpg

@@ -18,6 +18,9 @@
 <body>
     <main style="display: flex; flex-direction: column; align-items: center;">
         <h1>YOLO11 Run Web ONNX</h1>
+        <h3 id="modelName">Model Name: </h3>
+        <span id="modelLoadMemory">Model Load Memory: </span>
+        <span id="modelRunMemory">Model Run Memory: </span>
         <input type="file" id="fileInput" accept="image/*">
         <h3 id="detectResult">Detect Result: </h3>
         <div id="detectResultBox" style="display: flex; flex-direction: column; margin-top: 10px; border: 1px solid #000;"></div>
@@ -29,6 +32,11 @@
         const canvas = document.querySelector('#canvas');
         const detectResult = document.querySelector('#detectResult');
         const detectResultBox = document.querySelector('#detectResultBox');
+        const modelName = document.querySelector('#modelName');
+        const modelLoadMemory = document.querySelector('#modelLoadMemory');
+        const modelRunMemory = document.querySelector('#modelRunMemory');
+        const usedModelName = 'yolo11n.onnx';
+        modelName.textContent = 'Model Name: ' + usedModelName;
         let modelSession = null;
         let ctx = null;
 
@@ -130,7 +138,7 @@
                 ort.env.logLevel = 'verbose';
 
                 // 모델 경로
-                const modelPath = "yolo11n.onnx";
+                const modelPath = usedModelName;
 
                 // 모델 옵션
                 const options = {
@@ -147,6 +155,8 @@
                 }
                 
                 const modelBuffer = await response.arrayBuffer();
+                console.log('모델 파일 로드 시 메모리 사용량:', performance.memory.usedJSHeapSize / 1024 / 1024, 'MB');
+                modelLoadMemory.textContent = 'Model Load Memory: ' + performance.memory.usedJSHeapSize / 1024 / 1024 + 'MB';
                 console.log('모델 파일 로드 완료, 크기:', modelBuffer.byteLength);
                 console.timeEnd('모델 로드 time:');
 
@@ -198,6 +208,8 @@
                 console.time('모델 실행 time:');
                 const outputTensor = await model.run(feeds);
                 console.log('outputTensor ', outputTensor);
+                console.log('모델 실행 시 메모리 사용량:', performance.memory.usedJSHeapSize / 1024 / 1024, 'MB');
+                modelRunMemory.textContent = 'Model Run Memory: ' + performance.memory.usedJSHeapSize / 1024 / 1024 + 'MB';
                 console.timeEnd('모델 실행 time:');
                 return outputTensor;
             } catch (error) {
