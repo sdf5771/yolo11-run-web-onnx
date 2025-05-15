@@ -139,7 +139,7 @@
                     executionMode: 'sequential',
                     enableOrtCustomOps: true
                 };
-
+                console.time('모델 로드 time:');
                 // fetch를 사용한 모델 로드 방식
                 const response = await fetch(modelPath);
                 if (!response.ok) {
@@ -148,6 +148,7 @@
                 
                 const modelBuffer = await response.arrayBuffer();
                 console.log('모델 파일 로드 완료, 크기:', modelBuffer.byteLength);
+                console.timeEnd('모델 로드 time:');
 
                 // WebGPU 지원 여부 확인
                 if(navigator.gpu) {
@@ -194,9 +195,10 @@
                 // 동적으로 입력 이름 사용
                 const feeds = {};
                 feeds[inputName] = inputTensor;
-                
+                console.time('모델 실행 time:');
                 const outputTensor = await model.run(feeds);
                 console.log('outputTensor ', outputTensor);
+                console.timeEnd('모델 실행 time:');
                 return outputTensor;
             } catch (error) {
                 console.error('모델 실행 오류:', error);
